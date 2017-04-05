@@ -193,10 +193,10 @@ fn shouldnt_happen<E>(_: E) -> IoError {
     IoError::new(ErrorKind::Other, "Shouldn't happen")
 }
 
-fn do_request<RpcServer: Server + 'static>(server: &RpcServer, ctl: &ServerCtl, request: Request,
-                                           logger: &Logger)
+fn do_request<RpcServer: Server + 'static>(server: &RpcServer, ctl: &ServerCtl,
+                                           mut request: Request, logger: &Logger)
                                            -> FutureMessage {
-    match server.rpc(ctl, &request.method, &request.params) {
+    match server.rpc(ctl, &request.method, request.params.take()) {
         None => {
             trace!(logger, "Server refused RPC {}", request.method);
             let reply = request.error(RpcError::method_not_found(request.method.clone()));
@@ -217,9 +217,9 @@ fn do_request<RpcServer: Server + 'static>(server: &RpcServer, ctl: &ServerCtl, 
 }
 
 fn do_notification<RpcServer: Server>(server: &RpcServer, ctl: &ServerCtl,
-                                      notification: &Notification, logger: &Logger)
+                                      notification: Notification, logger: &Logger)
                                       -> FutureMessage {
-    match server.notification(ctl, &notification.method, &notification.params) {
+    match server.notification(ctl, &notification.method, notification.params) {
         None => {
             trace!(logger,
                    "Server refused notification {}",
@@ -334,7 +334,7 @@ fn do_msg<RpcServer: Server + 'static>(server: &RpcServer, ctl: &ServerCtl, idma
             },
             Ok(Message::Request(req)) => Box::new(once(do_request(server, ctl, req, logger))),
             Ok(Message::Notification(notif)) => {
-                Box::new(once(do_notification(server, ctl, &notif, logger)))
+                Box::new(once(do_notification(server, ctl, notif, logger)))
             },
             Ok(Message::Batch(batch)) => do_batch(server, ctl, idmap, logger, batch),
             Ok(Message::UnmatchedSub(value)) => {

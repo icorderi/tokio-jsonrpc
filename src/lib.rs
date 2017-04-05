@@ -81,7 +81,7 @@
 //!     fn rpc(&self,
 //!            ctl: &ServerCtl,
 //!            method: &str,
-//!            _params: &Option<Params>)
+//!            _params: Option<Params>)
 //!         -> Option<Self::RpcCallResult> {
 //!         match method {
 //!             // Accept a hello message and finish the greeting

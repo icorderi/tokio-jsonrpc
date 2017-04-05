@@ -38,14 +38,14 @@ impl Server for AnswerServer {
     type Success = u32;
     type RpcCallResult = Result<u32, RpcError>;
     type NotificationResult = Result<(), ()>;
-    fn rpc(&self, ctl: &ServerCtl, method: &str, params: &Option<Params>)
+    fn rpc(&self, ctl: &ServerCtl, method: &str, params: Option<Params>)
            -> Option<Self::RpcCallResult> {
         ctl.terminate();
         assert_eq!(method, "test");
         assert!(params.is_none());
         Some(Ok(42))
     }
-    fn notification(&self, ctl: &ServerCtl, method: &str, params: &Option<Params>)
+    fn notification(&self, ctl: &ServerCtl, method: &str, params: Option<Params>)
                     -> Option<Self::NotificationResult> {
         ctl.terminate();
         assert_eq!(method, "notif");
@@ -152,7 +152,7 @@ impl Server for AnotherServer {
     type Success = bool;
     type RpcCallResult = BoxFuture<bool, RpcError>;
     type NotificationResult = Result<(), ()>;
-    fn rpc(&self, ctl: &ServerCtl, method: &str, params: &Option<Params>)
+    fn rpc(&self, ctl: &ServerCtl, method: &str, params: Option<Params>)
            -> Option<Self::RpcCallResult> {
         let mut num = self.1.get();
         num -= 1;
@@ -465,7 +465,7 @@ impl Server for MutualServer {
     type Success = Value;
     type RpcCallResult = Box<Future<Item = Value, Error = RpcError>>;
     type NotificationResult = Result<(), ()>;
-    fn rpc(&self, ctl: &ServerCtl, method: &str, _params: &Option<Params>)
+    fn rpc(&self, ctl: &ServerCtl, method: &str, _params: Option<Params>)
            -> Option<Self::RpcCallResult> {
         if method == "ask" {
             let result = ctl.client()
@@ -477,7 +477,7 @@ impl Server for MutualServer {
             None
         }
     }
-    fn notification(&self, ctl: &ServerCtl, method: &str, _params: &Option<Params>)
+    fn notification(&self, ctl: &ServerCtl, method: &str, _params: Option<Params>)
                     -> Option<Self::NotificationResult> {
         if method == "terminate" {
             ctl.terminate();

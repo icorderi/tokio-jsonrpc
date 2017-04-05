@@ -69,7 +69,7 @@ impl Server for TimeServer {
     /// Just a formality, we don't need this one
     type NotificationResult = Result<(), ()>;
     /// The actual implementation of the RPC methods
-    fn rpc(&self, ctl: &ServerCtl, method: &str, params: &Option<Params>)
+    fn rpc(&self, ctl: &ServerCtl, method: &str, params: Option<Params>)
            -> Option<Self::RpcCallResult> {
         match method {
             // Return the number of seconds since epoch (eg. unix timestamp)
@@ -81,7 +81,7 @@ impl Server for TimeServer {
             "subscribe" => {
                 debug!(self.1, "Subscribing");
                 // Some parsing and bailing out on errors
-                let params: SubscribeParams = parse_params!(params.clone());
+                let params: SubscribeParams = parse_params!(params);
                 // We need to have a client to be able to send notifications
                 let client = ctl.client();
                 let handle = self.0.clone();

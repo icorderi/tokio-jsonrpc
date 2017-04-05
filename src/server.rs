@@ -50,7 +50,7 @@ pub trait Server {
     /// Conversion of parameters and handling of errors is up to the implementer of this trait.
     /// However, the [`jsonrpc_params`](../macro.jsonrpc_params.html) macro may help in that
     /// regard.
-    fn rpc(&self, _ctl: &ServerCtl, _method: &str, _params: &Option<Params>)
+    fn rpc(&self, _ctl: &ServerCtl, _method: &str, _params: Option<Params>)
            -> Option<Self::RpcCallResult> {
         None
     }
@@ -63,7 +63,7 @@ pub trait Server {
     /// Conversion of parameters and handling of errors is up to the implementer of this trait.
     /// However, the [`jsonrpc_params`](../macro.jsonrpc_params.html) macro may help in that
     /// regard.
-    fn notification(&self, _ctl: &ServerCtl, _method: &str, _params: &Option<Params>)
+    fn notification(&self, _ctl: &ServerCtl, _method: &str, _params: Option<Params>)
                     -> Option<Self::NotificationResult> {
         None
     }
@@ -120,7 +120,7 @@ impl<S: Server> Server for AbstractServer<S> {
     type Success = Value;
     type RpcCallResult = BoxRpcCallResult;
     type NotificationResult = BoxNotificationResult;
-    fn rpc(&self, ctl: &ServerCtl, method: &str, params: &Option<Params>)
+    fn rpc(&self, ctl: &ServerCtl, method: &str, params: Option<Params>)
            -> Option<Self::RpcCallResult> {
         self.0
             .rpc(ctl, method, params)
@@ -133,7 +133,7 @@ impl<S: Server> Server for AbstractServer<S> {
                 Box::new(future)
             })
     }
-    fn notification(&self, ctl: &ServerCtl, method: &str, params: &Option<Params>)
+    fn notification(&self, ctl: &ServerCtl, method: &str, params: Option<Params>)
                     -> Option<Self::NotificationResult> {
         // It seems the type signature is computed from inside the closure and it doesn't fit on
         // the outside, so we need to declare it manually :-(
@@ -188,17 +188,18 @@ impl ServerChain {
     }
 }
 
+// Review: can we achieve this without cloning? we could ask the server if it supports the method
 impl Server for ServerChain {
     type Success = Value;
     type RpcCallResult = BoxRpcCallResult;
     type NotificationResult = BoxNotificationResult;
-    fn rpc(&self, ctl: &ServerCtl, method: &str, params: &Option<Params>)
+    fn rpc(&self, ctl: &ServerCtl, method: &str, params: Option<Params>)
            -> Option<Self::RpcCallResult> {
-        self.iter_chain(|sub| sub.rpc(ctl, method, params))
+        self.iter_chain(|sub| sub.rpc(ctl, method, (&params).clone()))
     }
-    fn notification(&self, ctl: &ServerCtl, method: &str, params: &Option<Params>)
+    fn notification(&self, ctl: &ServerCtl, method: &str, params: Option<Params>)
                     -> Option<Self::NotificationResult> {
-        self.iter_chain(|sub| sub.notification(ctl, method, params))
+        self.iter_chain(|sub| sub.notification(ctl, method, (&params).clone()))
     }
     fn initialized(&self, ctl: &ServerCtl) {
         for sub in &self.0 {
@@ -892,8 +893,8 @@ mod tests {
         let (ctl, dropped, _killed) = ServerCtl::new_test();
         // As we can't reasonably check all possible method names, do so for just a bunch
         for method in ["method", "notification", "check"].iter() {
-            assert!(server.rpc(&ctl, method, &None).is_none());
-            assert!(server.notification(&ctl, method, &None).is_none());
+            assert!(server.rpc(&ctl, method, None).is_none());
+            assert!(server.notification(&ctl, method, None).is_none());
         }
         // It terminates the ctl on the server side on initialization
         server.initialized(&ctl);
@@ -921,7 +922,7 @@ mod tests {
         type Success = bool;
         type RpcCallResult = Result<bool, RpcError>;
         type NotificationResult = Result<(), ()>;
-        fn rpc(&self, _ctl: &ServerCtl, method: &str, params: &Option<Params>)
+        fn rpc(&self, _ctl: &ServerCtl, method: &str, params: Option<Params>)
                -> Option<Self::RpcCallResult> {
             self.update(&self.rpc);
             match method {
@@ -932,7 +933,7 @@ mod tests {
                 _ => None,
             }
         }
-        fn notification(&self, _ctl: &ServerCtl, method: &str, params: &Option<Params>)
+        fn notification(&self, _ctl: &ServerCtl, method: &str, params: Option<Params>)
                         -> Option<Self::NotificationResult> {
             self.update(&self.notification);
             assert!(params.is_none());
@@ -955,17 +956,17 @@ mod tests {
         let log_server = LogServer::default();
         let abstract_server = AbstractServer::new(log_server);
         let (ctl, _, _) = ServerCtl::new_test();
-        let rpc_result = abstract_server.rpc(&ctl, "test", &None)
+        let rpc_result = abstract_server.rpc(&ctl, "test", None)
             .unwrap()
             .wait()
             .unwrap();
         assert_eq!(Value::Bool(true), rpc_result);
-        abstract_server.notification(&ctl, "notification", &None)
+        abstract_server.notification(&ctl, "notification", None)
             .unwrap()
             .wait()
             .unwrap();
-        assert!(abstract_server.rpc(&ctl, "another", &None).is_none());
-        assert!(abstract_server.notification(&ctl, "another", &None).is_none());
+        assert!(abstract_server.rpc(&ctl, "another", None).is_none());
+        assert!(abstract_server.notification(&ctl, "another", None).is_none());
         abstract_server.initialized(&ctl);
         let log_server = abstract_server.into_inner();
         let expected = LogServer {
@@ -983,7 +984,7 @@ mod tests {
         type Success = usize;
         type RpcCallResult = Result<usize, RpcError>;
         type NotificationResult = Result<(), ()>;
-        fn rpc(&self, _ctl: &ServerCtl, method: &str, _params: &Option<Params>)
+        fn rpc(&self, _ctl: &ServerCtl, method: &str, _params: Option<Params>)
                -> Option<Self::RpcCallResult> {
             match method {
                 "another" => Some(Ok(42)),
@@ -1008,21 +1009,21 @@ mod tests {
         chain.initialized(&ctl);
         dropped.wait().unwrap();
         assert_eq!(Value::Bool(true),
-                   chain.rpc(&ctl, "test", &None)
+                   chain.rpc(&ctl, "test", None)
                        .unwrap()
                        .wait()
                        .unwrap());
         assert_eq!(json!(42),
-                   chain.rpc(&ctl, "another", &params!(null))
+                   chain.rpc(&ctl, "another", params!(null))
                        .unwrap()
                        .wait()
                        .unwrap());
-        assert!(chain.rpc(&ctl, "wrong", &params!(null)).is_none());
-        chain.notification(&ctl, "notification", &None)
+        assert!(chain.rpc(&ctl, "wrong", params!(null)).is_none());
+        chain.notification(&ctl, "notification", None)
             .unwrap()
             .wait()
             .unwrap();
-        assert!(chain.notification(&ctl, "another", &None).is_none());
+        assert!(chain.notification(&ctl, "another", None).is_none());
         // It would be great to check what is logged inside the log server. But downcasting a trait
         // object seems to be a big pain and probably isn't worth it here.
     }
