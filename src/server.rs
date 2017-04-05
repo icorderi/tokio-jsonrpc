@@ -207,10 +207,16 @@ impl Server for ServerChain {
     }
 }
 
-/// Returns a Result<T, RpcError>
+/// expands to a Result<T, RpcError> or Option<Result<T, RpcError>>
 // TODO: docs missing
 #[macro_export]
 macro_rules! try_parse_params {
+    // Returns a Option<Result<T, RpcError>>
+    ($params:expr, option $(#[$attr:meta])* { $($body:tt)* }) => {
+        parse_params!(@parse [$params, $(#[$attr])*] {} [] { $($body)* });
+    };
+
+    // Returns a Result<T, RpcError>
     ($params:expr, $(#[$attr:meta])* { $($body:tt)* }) => {
         {
             let parsed = parse_params!(@parse [$params, $(#[$attr])*] {} [] { $($body)* });
@@ -221,12 +227,20 @@ macro_rules! try_parse_params {
         }
     };
 
-    ($params:expr, option $(#[$attr:meta])* { $($body:tt)* }) => {
-        parse_params!(@parse [$params, $(#[$attr])*] {} [] { $($body)* });
-    };
+    // Returns a Result<T, RpcError>
+    ($params:expr) => {
+        {
+            let parsed = $crate::message::FromParams::from_params($params);
+            match parsed {
+                None => Err(RpcError::invalid_params(Some("Expected parameters".to_owned()))),
+                Some(x) => x,
+            }
+        }
+    }
 }
 
 /// Will exit the function if the parsing fails
+/// expands to a T or Option<T>, will `return` with Option<Result<T, RpcError>> on errors
 // TODO: docs missing
 // TODO: add a tokio-jsonrpc-derive that will do similar code for an already
 #[macro_export]
@@ -344,12 +358,37 @@ macro_rules! parse_params {
             let parsed = parse_params!(@parse [$params, $(#[$attr])*] {} [] { $($body)* });
             match parsed {
                 None => return Some(Err(RpcError::invalid_params(
-                    Some("Expected parameters".to_owned())))),
+                                        Some("Expected parameters".to_owned())))),
                 Some(Err(err)) => return Some(Err(err)),
                 Some(Ok(params)) => params,
             }
         }
     };
+
+    // Returns an Option<T>
+    (option $params:expr) => {
+        {
+            let parsed = $crate::message::FromParams::from_params($params);
+            match parsed {
+                None => None
+                Some(Err(err)) => return Some(Err(err)),
+                Some(Ok(params)) => params,
+            }
+        }
+    };
+
+    // Returns a T
+    ($params:expr) => {
+        {
+            let parsed = $crate::message::FromParams::from_params($params);
+            match parsed {
+                None => return Some(Err(RpcError::invalid_params(
+                                        Some("Expected parameters".to_owned())))),
+                Some(Err(err)) => return Some(Err(err)),
+                Some(Ok(params)) => params,
+            }
+        }
+    }
 }
 
 // XXX: do NOT merge this in

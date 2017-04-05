@@ -71,6 +71,12 @@ pub fn params_empty(x: &Option<Params>) -> bool {
     }
 }
 
+pub trait FromParams
+    where Self: Sized
+{
+    fn from_params(params: Option<Params>) -> Option<Result<Self, RpcError>>;
+}
+
 // TODO: how do we sanitize uses of `json_internal!()`? check the rocket crate
 // TODO: missing docs
 #[macro_export]
